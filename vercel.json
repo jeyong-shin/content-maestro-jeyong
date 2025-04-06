@@ -1,9 +1,9 @@
 {
     "functions": {
-      "/api/contents/generate": {
+      "api/contents/generate": {
         "maxDuration": 60
       },
-      "/app/api/contents/generate/route": {
+      "app/api/contents/generate/route": {
         "maxDuration": 60
       }
     },
