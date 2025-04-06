@@ -57,4 +57,21 @@ BEGIN
     v_content_id
   );
 END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 대신 간단한 방식으로 크레딧 증가 함수 구현
+CREATE OR REPLACE FUNCTION add_credits(p_user_id UUID, p_amount INTEGER) RETURNS INTEGER AS $$
+DECLARE
+  v_new_credits INTEGER;
+BEGIN
+  -- 크레딧 증가
+  UPDATE user_credits 
+  SET 
+    credits = credits + p_amount,
+    updated_at = NOW()
+  WHERE user_id = p_user_id
+  RETURNING credits INTO v_new_credits;
+  
+  RETURN v_new_credits;
+END;
 $$ LANGUAGE plpgsql SECURITY DEFINER; 

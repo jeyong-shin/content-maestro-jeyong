@@ -8,11 +8,20 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Check, CreditCard } from "lucide-react"
+import { Check, CreditCard, Loader2 } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getUserCredits } from "@/utils/credit-service"
 import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { preparePayment } from "@/utils/payment-service"
+import { loadTossPayments } from "@tosspayments/payment-sdk"
+import PaymentWidget from "./payment-widget"
+import dynamic from "next/dynamic"
+
+// 클라이언트 사이드에서만 로드되도록 동적 임포트
+const DynamicPaymentWidget = dynamic(() => import('./payment-widget'), {
+  ssr: false
+});
 
 interface Plan {
   id: string
@@ -31,6 +40,12 @@ export default function CreditsPage() {
   const router = useRouter()
   const [userCredits, setUserCredits] = useState<number>(0)
   const [isLoadingCredits, setIsLoadingCredits] = useState(true)
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+  const [paymentInfo, setPaymentInfo] = useState<{
+    orderId: string;
+    amount: number;
+    orderName: string;
+  } | null>(null);
 
   // 인증 체크: 로그인하지 않은 사용자는 로그인 페이지로 리다이렉트
   useEffect(() => {
@@ -101,9 +116,52 @@ export default function CreditsPage() {
     },
   ]
 
-  const handlePurchase = () => {
-    alert("결제 시스템으로 연결됩니다. (실제 구현 시 토스페이먼츠 연동)")
-  }
+  const handlePurchase = async () => {
+    if (!user) {
+      toast.error("로그인이 필요합니다.");
+      return;
+    }
+    
+    try {
+      setIsProcessingPayment(true);
+      
+      // 선택된 플랜 정보
+      const selectedPlanInfo = plans.find((p) => p.id === selectedPlan) || plans[0];
+      
+      // 결제 준비 (서버에 결제 정보 저장)
+      const paymentPreparation = await preparePayment({
+        id: selectedPlanInfo.id,
+        name: selectedPlanInfo.name,
+        credits: selectedPlanInfo.credits,
+        price: selectedPlanInfo.price
+      });
+      
+      console.log("결제 준비 정보:", paymentPreparation);
+      
+      // 결제 정보 설정 (위젯에서 사용)
+      setPaymentInfo({
+        orderId: paymentPreparation.orderId,
+        amount: selectedPlanInfo.price,
+        orderName: `크레딧 충전 - ${selectedPlanInfo.name}`
+      });
+      
+    } catch (error: any) {
+      console.error("결제 준비 오류:", error);
+      
+      // 오류 메시지를 더 자세히 표시
+      let errorMessage = "결제 준비 중 오류가 발생했습니다.";
+      if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      if (error.code) {
+        errorMessage += ` (코드: ${error.code})`;
+      }
+      
+      toast.error(errorMessage);
+      setIsProcessingPayment(false);
+    }
+  };
 
   // 선택된 플랜 정보
   const selectedPlanInfo = plans.find((p) => p.id === selectedPlan) || plans[0]
@@ -250,68 +308,71 @@ export default function CreditsPage() {
                       </div>
                     </div>
                   </div>
-
-                  <div className="rounded-lg border p-4">
-                    <h3 className="font-medium">결제 방법</h3>
-                    <div className="mt-2 flex items-center space-x-2">
-                      <CreditCard className="h-5 w-5 text-gray-500" />
-                      <span>토스페이먼츠 결제 시스템 사용</span>
-                    </div>
-                    <ul className="mt-2 space-y-1 text-sm text-gray-500">
-                      <li className="flex items-center">
-                        <Check className="mr-1 h-3 w-3 text-green-500" />
-                        <span>신용카드, 체크카드 결제 가능</span>
-                      </li>
-                      <li className="flex items-center">
-                        <Check className="mr-1 h-3 w-3 text-green-500" />
-                        <span>간편결제 지원 (카카오페이, 네이버페이 등)</span>
-                      </li>
-                      <li className="flex items-center">
-                        <Check className="mr-1 h-3 w-3 text-green-500" />
-                        <span>안전한 결제 시스템</span>
-                      </li>
-                    </ul>
-                  </div>
                 </CardContent>
-                <CardFooter className="flex flex-col space-y-4">
-                  <Button className="w-full" onClick={handlePurchase}>
-                    결제하기
-                  </Button>
-                  <p className="text-center text-xs text-gray-500">
-                    결제 시 이용약관 및 개인정보처리방침에 동의하게 됩니다.
-                  </p>
-                </CardFooter>
-              </Card>
-
-              <div className="mt-4">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle>최근 결제 내역</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoadingCredits ? (
-                      <div className="flex items-center justify-center py-4">
-                        <p>결제 내역 로딩 중...</p>
-                      </div>
+                <CardFooter>
+                  <Button 
+                    onClick={handlePurchase} 
+                    className="w-full" 
+                    disabled={isProcessingPayment || isLoadingCredits}
+                  >
+                    {isProcessingPayment ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        결제 처리 중...
+                      </>
                     ) : (
                       <>
-                        <div className="space-y-2">
-                          {/* 실제 서비스에서는 API를 통해 결제 내역을 가져옵니다 */}
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">최근 내역 없음</span>
-                            <span>-</span>
-                            <span className="font-medium">-</span>
-                          </div>
-                        </div>
-                        <div className="mt-4 text-center">
-                          <Link href="/dashboard/history" className="text-sm text-primary hover:underline">
-                            전체 결제 내역 보기
-                          </Link>
-                        </div>
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        결제하기
                       </>
                     )}
-                  </CardContent>
-                </Card>
+                  </Button>
+                </CardFooter>
+              </Card>
+              
+              {/* 토스페이먼츠 결제 위젯 */}
+              {paymentInfo && (
+                <DynamicPaymentWidget
+                  clientKey="test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq"
+                  customerKey={user.id}
+                  amount={paymentInfo.amount}
+                  orderId={paymentInfo.orderId}
+                  orderName={paymentInfo.orderName}
+                  customerEmail={user.email || undefined}
+                  successUrl={`${window.location.origin}/payments/success`}
+                  failUrl={`${window.location.origin}/payments/fail`}
+                  onSuccess={() => {
+                    setPaymentInfo(null);
+                    setIsProcessingPayment(false);
+                  }}
+                  onFail={() => {
+                    setPaymentInfo(null);
+                    setIsProcessingPayment(false);
+                    toast.error("결제가 취소되었습니다.");
+                  }}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border p-4">
+            <h3 className="text-lg font-medium">크레딧 사용 가이드</h3>
+            <div className="mt-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500" />
+                <p className="text-sm">1개의 크레딧으로 1개의 콘텐츠를 생성할 수 있습니다.</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500" />
+                <p className="text-sm">생성된 콘텐츠의 저작권은 전적으로 사용자에게 있습니다.</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500" />
+                <p className="text-sm">크레딧은 구매 후 즉시 계정에 추가되며, 만료 기간이 없습니다.</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500" />
+                <p className="text-sm">대량 구매 시 할인 혜택이 자동으로 적용됩니다.</p>
               </div>
             </div>
           </div>

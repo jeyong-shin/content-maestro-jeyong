@@ -114,6 +114,60 @@ export const useCredits = async (
   }
 }
 
+// 크레딧 충전 함수 (결제 성공 시 호출)
+export const addCredits = async (userId: string, credits: number, orderId: string, paymentKey: string) => {
+  try {
+    // 현재 크레딧 조회
+    const { data, error: getError } = await supabase
+      .from("user_credits")
+      .select("credits")
+      .eq("user_id", userId)
+      .single();
+    
+    if (getError) {
+      console.error("크레딧 정보 조회 오류:", getError);
+      throw new Error("크레딧 정보를 조회하는데 실패했습니다.");
+    }
+    
+    const newCreditAmount = data.credits + credits;
+    
+    // 크레딧 정보 업데이트
+    const { error: updateError } = await supabase
+      .from("user_credits")
+      .update({ 
+        credits: newCreditAmount,
+        updated_at: new Date()
+      })
+      .eq("user_id", userId);
+
+    if (updateError) {
+      console.error("크레딧 충전 오류:", updateError)
+      throw new Error("크레딧 충전 중 오류가 발생했습니다.")
+    }
+
+    // 크레딧 트랜잭션 기록
+    const { error: transactionError } = await supabase
+      .from("credit_transactions")
+      .insert({
+        user_id: userId,
+        amount: credits,
+        type: 'charge',
+        description: `크레딧 충전 - 주문번호: ${orderId}`,
+        payment_key: paymentKey
+      })
+
+    if (transactionError) {
+      console.error("트랜잭션 기록 오류:", transactionError)
+      // 트랜잭션 기록 실패가 전체 프로세스를 중단하지는 않음
+    }
+
+    return true
+  } catch (error: any) {
+    console.error("크레딧 충전 처리 오류:", error)
+    throw error
+  }
+}
+
 // 크레딧 충전 내역 가져오기
 export const getCreditTransactions = async () => {
   try {
