@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 토스페이먼츠 API로 결제 승인 요청
-    const tossPaymentsUrl = 'https://api.tosspayments.com/v2/payments/confirm';
+    const tossPaymentsUrl = 'https://api.tosspayments.com/v1/payments/confirm';
     const secretKey = process.env.TOSS_SECRET_KEY;
     
     if (!secretKey) {
@@ -40,7 +40,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('토스페이먼츠 API 요청 시작 - 시크릿 키 형식:', secretKey.substring(0, 10) + '...');
     const encodedSecret = Buffer.from(`${secretKey}:`).toString('base64');
+    console.log('토스페이먼츠 API 요청 시작');
+    console.log('요청 데이터:', JSON.stringify({
+      orderId,
+      amount,
+      paymentKey
+    }));
+    console.log('Authorization 헤더:', `Basic ${encodedSecret.substring(0, 20)}...`);
 
     const response = await fetch(tossPaymentsUrl, {
       method: 'POST',
@@ -55,7 +63,38 @@ export async function POST(request: NextRequest) {
       })
     });
 
-    const responseData = await response.json();
+    console.log('토스페이먼츠 API 응답 상태:', response.status, response.statusText);
+    
+    // 응답 텍스트 먼저 확인
+    const responseText = await response.text();
+    
+    // 응답 내용 로그
+    if (responseText) {
+      console.log('토스페이먼츠 API 응답:', responseText.substring(0, 200) + (responseText.length > 200 ? '...' : ''));
+    } else {
+      console.log('토스페이먼츠 API 오류 응답: ');
+      console.log('토스페이먼츠 API 오류 응답 내용 없음');
+    }
+    
+    // 응답이 비어있는지 확인
+    let responseData;
+    if (responseText) {
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (error) {
+        console.error('토스페이먼츠 API 응답 파싱 오류:', error, '응답 텍스트:', responseText);
+        return NextResponse.json(
+          { message: '결제 서버 응답을 처리할 수 없습니다.' },
+          { status: 500 }
+        );
+      }
+    } else {
+      console.error('토스페이먼츠 API 응답 내용이 비어있습니다');
+      return NextResponse.json(
+        { message: '결제 서버 응답 오류 (응답 내용 없음)' },
+        { status: response.status }
+      );
+    }
 
     // 응답이 성공적이지 않은 경우
     if (!response.ok) {

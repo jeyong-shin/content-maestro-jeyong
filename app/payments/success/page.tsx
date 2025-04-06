@@ -14,6 +14,8 @@ export default function PaymentSuccessPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [paymentDetails, setPaymentDetails] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isCompleted, setIsCompleted] = useState(false)
+  const [requestCount, setRequestCount] = useState(0)
 
   useEffect(() => {
     const paymentKey = searchParams.get("paymentKey")
@@ -27,26 +29,53 @@ export default function PaymentSuccessPage() {
       return
     }
 
+    // 이미 완료된 요청 또는 최대 시도 횟수 초과 시 중복 요청 방지
+    if (isCompleted || requestCount > 0) {
+      return
+    }
+
     const completePayment = async () => {
       try {
         setIsLoading(true)
+        setRequestCount(prev => prev + 1)
+        
         const result = await processPaymentSuccess(
           orderId,
           paymentKey,
           parseInt(amount)
         )
+        
         setPaymentDetails(result)
+        setIsCompleted(true)
         toast.success("크레딧이 성공적으로 충전되었습니다!")
+        
+        // 3초 후 자동으로 크레딧 페이지로 이동
+        setTimeout(() => {
+          router.push("/dashboard/credits")
+        }, 3000)
       } catch (error: any) {
         console.error("결제 완료 처리 오류:", error)
-        setError(error.message || "결제 완료 처리 중 오류가 발생했습니다.")
+        const errorMessage = error.message || "결제 완료 처리 중 오류가 발생했습니다."
+        setError(errorMessage)
+        
+        // 서버 로그에서 성공 메시지가 있는지 확인
+        if (errorMessage.includes("잠시 후 다시 이용")) {
+          toast.info("토스페이먼츠 서버에 일시적인 오류가 발생했습니다. 크레딧 페이지에서 충전 결과를 확인해주세요.", {
+            duration: 5000
+          })
+          
+          // 5초 후 자동으로 크레딧 페이지로 이동
+          setTimeout(() => {
+            router.push("/dashboard/credits")
+          }, 5000)
+        }
       } finally {
         setIsLoading(false)
       }
     }
 
     completePayment()
-  }, [searchParams])
+  }, [searchParams, isCompleted, requestCount, router])
 
   const handleGoToCredits = () => {
     router.push("/dashboard/credits")
