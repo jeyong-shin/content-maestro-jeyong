@@ -1,6 +1,9 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useAuth } from "@/components/auth-provider"
 
 interface User {
   name: string
@@ -13,6 +16,8 @@ interface DashboardHeaderProps {
 }
 
 export default function DashboardHeader({ user }: DashboardHeaderProps) {
+  const { signOut } = useAuth()
+
   return (
     <header className="border-b bg-white">
       <div className="container flex h-16 items-center justify-between py-4">
@@ -41,9 +46,20 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
               </Button>
             </Link>
           </div>
-          <Avatar>
-            <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-          </Avatar>
+          <div className="flex items-center gap-2">
+            <span className="hidden md:inline-block text-sm">{user.email}</span>
+            <Avatar>
+              <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={signOut}
+              className="hidden md:inline-flex"
+            >
+              로그아웃
+            </Button>
+          </div>
         </div>
       </div>
     </header>

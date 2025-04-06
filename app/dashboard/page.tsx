@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -9,8 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Copy, CreditCard, LogOut, Settings, User } from "lucide-react"
 import DashboardHeader from "@/components/dashboard-header"
+import { useAuth } from "@/components/auth-provider"
 
 export default function Dashboard() {
+  const { user, loading } = useAuth()
+  const router = useRouter()
   const [topic, setTopic] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedContent, setGeneratedContent] = useState<null | {
@@ -19,10 +23,29 @@ export default function Dashboard() {
     seoTips: string[]
   }>(null)
 
-  // Mock user data - in a real app, this would come from authentication
-  const user = {
-    name: "사용자",
-    email: "user@example.com",
+  // 인증 체크: 로그인하지 않은 사용자는 로그인 페이지로 리다이렉트
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login")
+    }
+  }, [user, loading, router])
+
+  // 로딩 중이거나 인증되지 않은 상태에서는 로딩 화면 표시
+  if (loading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">로딩 중...</h1>
+          <p className="mt-2 text-gray-500">잠시만 기다려 주세요.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Mock user data - 실제 앱에서는 인증된 사용자 정보를 사용
+  const mockUser = {
+    name: user.email?.split('@')[0] || "사용자",
+    email: user.email || "user@example.com",
     credits: 8,
   }
 
@@ -83,7 +106,7 @@ ${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니
 
   return (
     <div className="flex min-h-screen flex-col">
-      <DashboardHeader user={user} />
+      <DashboardHeader user={mockUser} />
 
       <div className="container flex-1 py-8">
         <div className="grid gap-8 md:grid-cols-[1fr_3fr]">
@@ -97,10 +120,10 @@ ${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니
                 <div className="flex items-center justify-between">
                   <span>남은 크레딧</span>
                   <Badge variant="outline" className="text-lg">
-                    {user.credits}
+                    {mockUser.credits}
                   </Badge>
                 </div>
-                {user.credits < 3 && (
+                {mockUser.credits < 3 && (
                   <p className="mt-2 text-sm text-red-500">크레딧이 부족합니다. 충전이 필요합니다.</p>
                 )}
               </CardContent>
@@ -163,8 +186,8 @@ ${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니
                 </div>
               </CardContent>
               <CardFooter className="flex justify-between">
-                <div className="text-sm text-gray-500">남은 크레딧: {user.credits}개</div>
-                <Button onClick={handleGenerate} disabled={isGenerating || !topic.trim() || user.credits <= 0}>
+                <div className="text-sm text-gray-500">남은 크레딧: {mockUser.credits}개</div>
+                <Button onClick={handleGenerate} disabled={isGenerating || !topic.trim() || mockUser.credits <= 0}>
                   {isGenerating ? "생성 중..." : "콘텐츠 생성하기"}
                 </Button>
               </CardFooter>
