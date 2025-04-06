@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Copy, CreditCard, LogOut, Settings, User } from "lucide-react"
 import DashboardHeader from "@/components/dashboard-header"
 import { useAuth } from "@/components/auth-provider"
+import { getUserCredits, useCredits } from "@/utils/credit-service"
+import { toast } from "sonner"
 
 export default function Dashboard() {
   const { user, loading } = useAuth()
@@ -22,6 +24,8 @@ export default function Dashboard() {
     content: string
     seoTips: string[]
   }>(null)
+  const [userCredits, setUserCredits] = useState<number>(0)
+  const [isLoadingCredits, setIsLoadingCredits] = useState(true)
 
   // 인증 체크: 로그인하지 않은 사용자는 로그인 페이지로 리다이렉트
   useEffect(() => {
@@ -29,6 +33,26 @@ export default function Dashboard() {
       router.push("/login")
     }
   }, [user, loading, router])
+
+  // 사용자 크레딧 정보 로드
+  useEffect(() => {
+    const loadUserCredits = async () => {
+      if (!user) return
+      
+      setIsLoadingCredits(true)
+      try {
+        const credits = await getUserCredits()
+        setUserCredits(credits)
+      } catch (error) {
+        console.error("크레딧 정보 로드 오류:", error)
+        toast.error("크레딧 정보를 가져오는데 실패했습니다.")
+      } finally {
+        setIsLoadingCredits(false)
+      }
+    }
+
+    loadUserCredits()
+  }, [user])
 
   // 로딩 중이거나 인증되지 않은 상태에서는 로딩 화면 표시
   if (loading || !user) {
@@ -42,23 +66,33 @@ export default function Dashboard() {
     )
   }
 
-  // Mock user data - 실제 앱에서는 인증된 사용자 정보를 사용
-  const mockUser = {
+  // 사용자 정보 생성
+  const userInfo = {
     name: user.email?.split('@')[0] || "사용자",
     email: user.email || "user@example.com",
-    credits: 8,
+    credits: userCredits
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!topic.trim()) return
+    if (userCredits < 1) {
+      toast.error("크레딧이 부족합니다. 충전이 필요합니다.")
+      return
+    }
 
     setIsGenerating(true)
 
-    // Simulate API call with timeout
-    setTimeout(() => {
-      setGeneratedContent({
-        title: `${topic}에 대한 완벽 가이드: 알아두어야 할 모든 것`,
-        content: `# ${topic}에 대한 완벽 가이드: 알아두어야 할 모든 것
+    try {
+      // AI 콘텐츠 생성 (이 부분은 실제 AI API 연동이 필요)
+      const generatedTitle = `${topic}에 대한 완벽 가이드: 알아두어야 할 모든 것`
+      const generatedSeoTips = [
+        `주요 키워드 '${topic}'을 제목, 소제목, 첫 단락에 포함하세요.`,
+        "2,000단어 이상의 상세한 콘텐츠가 SEO에 유리합니다.",
+        "관련 이미지에 대체 텍스트(alt text)를 추가하세요.",
+        "내부 링크와 외부 링크를 적절히 활용하세요.",
+        "메타 디스크립션에 주요 키워드를 포함하세요.",
+      ]
+      const generatedContent = `# ${topic}에 대한 완벽 가이드: 알아두어야 할 모든 것
 
 ## 소개
 
@@ -86,27 +120,43 @@ ${topic}을 효과적으로 활용하기 위해서는 다음과 같은 방법을
 
 ## 결론
 
-${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니다. 이에 대한 이해와 적용은 개인과 기업 모두에게 큰 경쟁력이 될 것입니다.`,
-        seoTips: [
-          `주요 키워드 '${topic}'을 제목, 소제목, 첫 단락에 포함하세요.`,
-          "2,000단어 이상의 상세한 콘텐츠가 SEO에 유리합니다.",
-          "관련 이미지에 대체 텍스트(alt text)를 추가하세요.",
-          "내부 링크와 외부 링크를 적절히 활용하세요.",
-          "메타 디스크립션에 주요 키워드를 포함하세요.",
-        ],
+${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니다. 이에 대한 이해와 적용은 개인과 기업 모두에게 큰 경쟁력이 될 것입니다.`
+
+      // 콘텐츠 저장 및 크레딧 사용
+      const remainingCredits = await useCredits(
+        topic,
+        generatedTitle,
+        generatedContent,
+        generatedSeoTips,
+        1 // 사용할 크레딧 수
+      )
+
+      // UI에 표시할 콘텐츠 설정
+      setGeneratedContent({
+        title: generatedTitle,
+        content: generatedContent,
+        seoTips: generatedSeoTips,
       })
+
+      // 업데이트된 크레딧 정보 갱신
+      setUserCredits(remainingCredits)
+      toast.success("콘텐츠가 성공적으로 생성되었습니다.")
+    } catch (error: any) {
+      console.error("콘텐츠 생성 오류:", error)
+      toast.error(error.message || "콘텐츠 생성 중 오류가 발생했습니다.")
+    } finally {
       setIsGenerating(false)
-    }, 2000)
+    }
   }
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text)
-    alert("클립보드에 복사되었습니다!")
+    toast.success("클립보드에 복사되었습니다!")
   }
 
   return (
     <div className="flex min-h-screen flex-col">
-      <DashboardHeader user={mockUser} />
+      <DashboardHeader user={userInfo} />
 
       <div className="container flex-1 py-8">
         <div className="grid gap-8 md:grid-cols-[1fr_3fr]">
@@ -117,13 +167,19 @@ ${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니
                 <CardTitle>크레딧 정보</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
-                  <span>남은 크레딧</span>
-                  <Badge variant="outline" className="text-lg">
-                    {mockUser.credits}
-                  </Badge>
-                </div>
-                {mockUser.credits < 3 && (
+                {isLoadingCredits ? (
+                  <div className="flex items-center justify-center py-4">
+                    <p>크레딧 정보 로딩 중...</p>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span>남은 크레딧</span>
+                    <Badge variant="outline" className="text-lg">
+                      {userInfo.credits}
+                    </Badge>
+                  </div>
+                )}
+                {userInfo.credits < 3 && !isLoadingCredits && (
                   <p className="mt-2 text-sm text-red-500">크레딧이 부족합니다. 충전이 필요합니다.</p>
                 )}
               </CardContent>
@@ -186,8 +242,11 @@ ${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니
                 </div>
               </CardContent>
               <CardFooter className="flex justify-between">
-                <div className="text-sm text-gray-500">남은 크레딧: {mockUser.credits}개</div>
-                <Button onClick={handleGenerate} disabled={isGenerating || !topic.trim() || mockUser.credits <= 0}>
+                <div className="text-sm text-gray-500">남은 크레딧: {userInfo.credits}개</div>
+                <Button 
+                  onClick={handleGenerate} 
+                  disabled={isGenerating || !topic.trim() || userInfo.credits <= 0 || isLoadingCredits}
+                >
                   {isGenerating ? "생성 중..." : "콘텐츠 생성하기"}
                 </Button>
               </CardFooter>
