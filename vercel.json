@@ -1,9 +1,9 @@
 {
     "functions": {
-      "api/contents/generate": {
+      "api/**/*.js": {
         "maxDuration": 60
       },
-      "app/api/contents/generate/route": {
+      ".next/server/app/api/**/*.js": {
         "maxDuration": 60
       }
     },
