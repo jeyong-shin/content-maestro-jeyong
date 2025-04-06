@@ -1,20 +1,43 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase } from "@/utils/supabase"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { useAuth } from "@/components/auth-provider"
+import { toast } from "sonner"
 
 export default function LoginPage() {
   const router = useRouter()
+  const { user, session } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const supabase = createClientComponentClient()
+  
+  // 이미 로그인된 사용자는 대시보드로 리다이렉트
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        // 세션 확인
+        const { data: sessionData } = await supabase.auth.getSession()
+        
+        if (sessionData.session || user || session) {
+          console.log("이미 로그인되어 있음, 대시보드로 이동")
+          router.push("/dashboard")
+        }
+      } catch (err) {
+        console.error("세션 확인 오류:", err)
+      }
+    }
+    
+    checkSession()
+  }, [router, user, session, supabase.auth])
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,18 +45,26 @@ export default function LoginPage() {
     setError("")
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) {
-        setError(error.message)
+      if (signInError) {
+        setError(signInError.message)
         return
       }
-
-      router.push("/dashboard")
-      router.refresh()
+      
+      if (data.session) {
+        // 로그인 성공 알림
+        toast.success("로그인 성공!")
+        
+        // 약간의 지연 후 리다이렉트 (세션 저장 시간 제공)
+        setTimeout(() => {
+          router.push("/dashboard")
+          router.refresh()
+        }, 500)
+      }
     } catch (error) {
       console.error("로그인 오류:", error)
       setError("로그인 중 오류가 발생했습니다.")

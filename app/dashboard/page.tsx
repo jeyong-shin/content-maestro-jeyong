@@ -10,12 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Copy, CreditCard, LogOut, Settings, User } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
-import { getUserCredits, useCredits } from "@/utils/credit-service"
+import { getUserCredits } from "@/utils/credit-service"
 import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 export default function Dashboard() {
-  const { user, loading, signOut } = useAuth()
+  const { user, session, loading, signOut } = useAuth()
   const router = useRouter()
   const [topic, setTopic] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
@@ -26,33 +27,58 @@ export default function Dashboard() {
   }>(null)
   const [userCredits, setUserCredits] = useState<number>(0)
   const [isLoadingCredits, setIsLoadingCredits] = useState(true)
+  const supabase = createClientComponentClient()
 
   // 인증 체크: 로그인하지 않은 사용자는 로그인 페이지로 리다이렉트
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login")
-    }
-  }, [user, loading, router])
+    const checkAuth = async () => {
+      // 로딩 중이 아니고 사용자 정보나 세션이 없을 때
+      if (!loading && (!user || !session)) {
+        console.log("인증 정보 없음, 로그인 페이지로 이동");
+        router.push("/login");
+      }
+    };
+    
+    checkAuth();
+  }, [user, session, loading, router]);
 
   // 사용자 크레딧 정보 로드
   useEffect(() => {
     const loadUserCredits = async () => {
-      if (!user) return
+      if (!user || !session) return
       
       setIsLoadingCredits(true)
       try {
+        // 세션 정보 확인 (직접 Supabase에서 체크)
+        const { data: authData, error: authError } = await supabase.auth.getSession()
+        
+        if (authError || !authData.session) {
+          console.log("세션 오류, 재인증 시도 중...")
+          // 오류 발생 시도 일단 진행 (getUserCredits 내에서도 체크함)
+        }
+        
+        // 지연 추가 (인증 정보가 완전히 로드되도록)
+        await new Promise(resolve => setTimeout(resolve, 500));
         const credits = await getUserCredits()
         setUserCredits(credits)
       } catch (error) {
         console.error("크레딧 정보 로드 오류:", error)
-        toast.error("크레딧 정보를 가져오는데 실패했습니다.")
+        // 개발용 오류 표시
+        if (process.env.NODE_ENV === 'development') {
+          toast.error("크레딧 정보를 가져오는데 실패했습니다.")
+        } else {
+          // 운영 환경에서는 기본값 사용
+          setUserCredits(10)
+        }
       } finally {
         setIsLoadingCredits(false)
       }
     }
 
-    loadUserCredits()
-  }, [user])
+    if (user && session) {
+      loadUserCredits()
+    }
+  }, [user, session, supabase])
 
   // 로딩 중이거나 인증되지 않은 상태에서는 로딩 화면 표시
   if (loading || !user) {
@@ -79,63 +105,30 @@ export default function Dashboard() {
     setIsGenerating(true)
 
     try {
-      // AI 콘텐츠 생성 (이 부분은 실제 AI API 연동이 필요)
-      const generatedTitle = `${topic}에 대한 완벽 가이드: 알아두어야 할 모든 것`
-      const generatedSeoTips = [
-        `주요 키워드 '${topic}'을 제목, 소제목, 첫 단락에 포함하세요.`,
-        "2,000단어 이상의 상세한 콘텐츠가 SEO에 유리합니다.",
-        "관련 이미지에 대체 텍스트(alt text)를 추가하세요.",
-        "내부 링크와 외부 링크를 적절히 활용하세요.",
-        "메타 디스크립션에 주요 키워드를 포함하세요.",
-      ]
-      const generatedContent = `# ${topic}에 대한 완벽 가이드: 알아두어야 할 모든 것
+      // API 호출을 통한 AI 콘텐츠 생성
+      const response = await fetch('/api/contents/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ topic }),
+      });
 
-## 소개
+      const data = await response.json();
 
-${topic}은 현대 사회에서 중요한 주제로 자리 잡고 있습니다. 이 글에서는 ${topic}에 대한 모든 것을 알아보겠습니다.
-
-## ${topic}의 중요성
-
-${topic}은 많은 사람들의 일상생활과 비즈니스에 큰 영향을 미치고 있습니다. 특히 디지털 시대에 접어들면서 그 중요성은 더욱 커지고 있습니다.
-
-## ${topic}의 주요 특징
-
-1. 효율성 증대
-2. 비용 절감 효과
-3. 사용자 경험 향상
-4. 시간 절약
-
-## ${topic} 활용 방법
-
-${topic}을 효과적으로 활용하기 위해서는 다음과 같은 방법을 고려해볼 수 있습니다:
-
-- 전문가의 조언 구하기
-- 관련 교육 및 자료 참고하기
-- 실제 사례 연구하기
-- 지속적인 업데이트 확인하기
-
-## 결론
-
-${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니다. 이에 대한 이해와 적용은 개인과 기업 모두에게 큰 경쟁력이 될 것입니다.`
-
-      // 콘텐츠 저장 및 크레딧 사용
-      const remainingCredits = await useCredits(
-        topic,
-        generatedTitle,
-        generatedContent,
-        generatedSeoTips,
-        1 // 사용할 크레딧 수
-      )
+      if (!response.ok) {
+        throw new Error(data.error || '콘텐츠 생성 중 오류가 발생했습니다.');
+      }
 
       // UI에 표시할 콘텐츠 설정
       setGeneratedContent({
-        title: generatedTitle,
-        content: generatedContent,
-        seoTips: generatedSeoTips,
+        title: data.content.title,
+        content: data.content.content,
+        seoTips: data.content.seoTips,
       })
 
       // 업데이트된 크레딧 정보 갱신
-      setUserCredits(remainingCredits)
+      setUserCredits(data.remainingCredits)
       toast.success("콘텐츠가 성공적으로 생성되었습니다.")
     } catch (error: any) {
       console.error("콘텐츠 생성 오류:", error)

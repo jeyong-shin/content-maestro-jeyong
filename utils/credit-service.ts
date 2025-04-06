@@ -1,10 +1,29 @@
 import { supabase } from "./supabase"
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+
+// Supabase 클라이언트 인스턴스 생성
+const getSupabaseClient = () => {
+  try {
+    // 브라우저 환경에서는 createClientComponentClient를 사용
+    if (typeof window !== 'undefined') {
+      return createClientComponentClient();
+    }
+    // 서버 환경에서는 기본 supabase 인스턴스 사용
+    return supabase;
+  } catch (error) {
+    console.error("Supabase 클라이언트 생성 오류:", error);
+    // 오류 발생 시 기본 인스턴스 반환
+    return supabase;
+  }
+};
 
 // 현재 사용자의 크레딧 정보 가져오기
 export const getUserCredits = async () => {
   try {
+    const supabaseClient = getSupabaseClient();
+    
     // 사용자 인증 정보 가져오기
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
     
     // 인증 오류 또는 사용자 정보가 없는 경우
     if (authError || !user) {
@@ -13,7 +32,7 @@ export const getUserCredits = async () => {
     }
 
     // 사용자 크레딧 정보 조회
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("user_credits")
       .select("credits")
       .eq("user_id", user.id)
@@ -26,7 +45,7 @@ export const getUserCredits = async () => {
       // 사용자 크레딧 정보가 없는 경우, 기본값 생성 시도
       if (error.code === 'PGRST116') {
         try {
-          const { data: insertData, error: insertError } = await supabase
+          const { data: insertData, error: insertError } = await supabaseClient
             .from("user_credits")
             .insert({ user_id: user.id, credits: 10 })
             .select("credits")
@@ -65,22 +84,31 @@ export const useCredits = async (
   title: string, 
   content: string, 
   seoTips: any[], 
-  creditsToUse: number = 1
+  creditsToUse: number = 1,
+  userId?: string
 ) => {
   try {
-    // 사용자 인증 정보 가져오기
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const supabaseClient = getSupabaseClient();
     
-    // 인증 오류 또는 사용자 정보가 없는 경우
-    if (authError || !user) {
-      throw new Error("인증된 사용자가 아닙니다.")
+    // 사용자 ID가 제공되지 않은 경우 인증 정보에서 가져오기
+    let user_id = userId;
+    if (!user_id) {
+      // 사용자 인증 정보 가져오기
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
+      
+      // 인증 오류 또는 사용자 정보가 없는 경우
+      if (authError || !user) {
+        throw new Error("인증된 사용자가 아닙니다.")
+      }
+      
+      user_id = user.id;
     }
 
     // 현재 크레딧 정보 확인
-    const { data: creditData, error: creditError } = await supabase
+    const { data: creditData, error: creditError } = await supabaseClient
       .from("user_credits")
       .select("credits")
-      .eq("user_id", user.id)
+      .eq("user_id", user_id)
       .single()
 
     if (creditError || !creditData) {
@@ -93,8 +121,8 @@ export const useCredits = async (
     }
 
     // 트랜잭션 시작
-    const { error: insertError } = await supabase.rpc("use_credits_and_save_content", {
-      p_user_id: user.id,
+    const { error: insertError } = await supabaseClient.rpc("use_credits_and_save_content", {
+      p_user_id: user_id,
       p_topic: topic,
       p_title: title,
       p_content: content,
@@ -107,7 +135,7 @@ export const useCredits = async (
     }
 
     // 업데이트된 크레딧 정보 반환
-    return await getUserCredits()
+    return creditData.credits - creditsToUse; // 빠른 응답을 위해 현재 값에서 차감된 값을 반환
   } catch (error: any) {
     console.error("크레딧 사용 오류:", error)
     throw error
@@ -117,8 +145,10 @@ export const useCredits = async (
 // 크레딧 충전 함수 (결제 성공 시 호출)
 export const addCredits = async (userId: string, credits: number, orderId: string, paymentKey: string) => {
   try {
+    const supabaseClient = getSupabaseClient();
+    
     // 현재 크레딧 조회
-    const { data, error: getError } = await supabase
+    const { data, error: getError } = await supabaseClient
       .from("user_credits")
       .select("credits")
       .eq("user_id", userId)
@@ -132,7 +162,7 @@ export const addCredits = async (userId: string, credits: number, orderId: strin
     const newCreditAmount = data.credits + credits;
     
     // 크레딧 정보 업데이트
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseClient
       .from("user_credits")
       .update({ 
         credits: newCreditAmount,
@@ -146,7 +176,7 @@ export const addCredits = async (userId: string, credits: number, orderId: strin
     }
 
     // 크레딧 트랜잭션 기록
-    const { error: transactionError } = await supabase
+    const { error: transactionError } = await supabaseClient
       .from("credit_transactions")
       .insert({
         user_id: userId,
@@ -171,8 +201,10 @@ export const addCredits = async (userId: string, credits: number, orderId: strin
 // 크레딧 충전 내역 가져오기
 export const getCreditTransactions = async () => {
   try {
+    const supabaseClient = getSupabaseClient();
+    
     // 사용자 인증 정보 가져오기
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
     
     // 인증 오류 또는 사용자 정보가 없는 경우
     if (authError || !user) {
@@ -180,7 +212,7 @@ export const getCreditTransactions = async () => {
       return []
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("credit_transactions")
       .select("*")
       .eq("user_id", user.id)
@@ -201,8 +233,10 @@ export const getCreditTransactions = async () => {
 // 콘텐츠 생성 내역 가져오기
 export const getContentGenerations = async () => {
   try {
+    const supabaseClient = getSupabaseClient();
+    
     // 사용자 인증 정보 가져오기
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
     
     // 인증 오류 또는 사용자 정보가 없는 경우
     if (authError || !user) {
@@ -210,7 +244,7 @@ export const getContentGenerations = async () => {
       return []
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("content_generations")
       .select("*")
       .eq("user_id", user.id)
