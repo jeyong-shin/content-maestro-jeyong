@@ -112,6 +112,7 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ topic }),
+        credentials: 'include',
       });
 
       const data = await response.json();
