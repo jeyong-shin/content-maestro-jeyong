@@ -9,13 +9,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Copy, CreditCard, LogOut, Settings, User } from "lucide-react"
-import DashboardHeader from "@/components/dashboard-header"
 import { useAuth } from "@/components/auth-provider"
 import { getUserCredits, useCredits } from "@/utils/credit-service"
 import { toast } from "sonner"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export default function Dashboard() {
-  const { user, loading } = useAuth()
+  const { user, loading, signOut } = useAuth()
   const router = useRouter()
   const [topic, setTopic] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
@@ -66,12 +66,8 @@ export default function Dashboard() {
     )
   }
 
-  // 사용자 정보 생성
-  const userInfo = {
-    name: user.email?.split('@')[0] || "사용자",
-    email: user.email || "user@example.com",
-    credits: userCredits
-  }
+  // 사용자 이름 계산
+  const userName = user.email?.split('@')[0] || "사용자"
 
   const handleGenerate = async () => {
     if (!topic.trim()) return
@@ -156,7 +152,51 @@ ${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니
 
   return (
     <div className="flex min-h-screen flex-col">
-      <DashboardHeader user={userInfo} />
+      {/* 직접 구현한 헤더 */}
+      <header className="border-b bg-white">
+        <div className="container flex h-16 items-center justify-between py-4">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-xl font-bold">콘텐츠 마에스트로</span>
+            </Link>
+            <nav className="hidden md:flex items-center gap-6">
+              <Link href="/dashboard" className="text-sm font-medium hover:underline">
+                대시보드
+              </Link>
+              <Link href="/dashboard/history" className="text-sm font-medium hover:underline">
+                결제 내역
+              </Link>
+              <Link href="/dashboard/settings" className="text-sm font-medium hover:underline">
+                설정
+              </Link>
+            </nav>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">크레딧: {userCredits}개</span>
+              <Link href="/dashboard/credits">
+                <Button variant="outline" size="sm">
+                  충전하기
+                </Button>
+              </Link>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="hidden md:inline-block text-sm">{user.email}</span>
+              <Avatar>
+                <AvatarFallback>{userName.charAt(0).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={signOut}
+                className="hidden md:inline-flex"
+              >
+                로그아웃
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
 
       <div className="container flex-1 py-8">
         <div className="grid gap-8 md:grid-cols-[1fr_3fr]">
@@ -175,11 +215,11 @@ ${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니
                   <div className="flex items-center justify-between">
                     <span>남은 크레딧</span>
                     <Badge variant="outline" className="text-lg">
-                      {userInfo.credits}
+                      {userCredits}
                     </Badge>
                   </div>
                 )}
-                {userInfo.credits < 3 && !isLoadingCredits && (
+                {userCredits < 3 && !isLoadingCredits && (
                   <p className="mt-2 text-sm text-red-500">크레딧이 부족합니다. 충전이 필요합니다.</p>
                 )}
               </CardContent>
@@ -242,10 +282,10 @@ ${topic}은 앞으로도 계속해서 발전하고 중요성이 커질 것입니
                 </div>
               </CardContent>
               <CardFooter className="flex justify-between">
-                <div className="text-sm text-gray-500">남은 크레딧: {userInfo.credits}개</div>
+                <div className="text-sm text-gray-500">남은 크레딧: {userCredits}개</div>
                 <Button 
                   onClick={handleGenerate} 
-                  disabled={isGenerating || !topic.trim() || userInfo.credits <= 0 || isLoadingCredits}
+                  disabled={isGenerating || !topic.trim() || userCredits <= 0 || isLoadingCredits}
                 >
                   {isGenerating ? "생성 중..." : "콘텐츠 생성하기"}
                 </Button>

@@ -1,26 +1,77 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Check, CreditCard } from "lucide-react"
-import DashboardHeader from "@/components/dashboard-header"
+import { useAuth } from "@/components/auth-provider"
+import { getUserCredits } from "@/utils/credit-service"
+import { toast } from "sonner"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+
+interface Plan {
+  id: string
+  name: string
+  credits: number
+  price: number
+  originalPrice?: number
+  discount: number
+  description: string
+  popular?: boolean
+}
 
 export default function CreditsPage() {
   const [selectedPlan, setSelectedPlan] = useState("basic")
+  const { user, loading, signOut } = useAuth()
+  const router = useRouter()
+  const [userCredits, setUserCredits] = useState<number>(0)
+  const [isLoadingCredits, setIsLoadingCredits] = useState(true)
 
-  // Mock user data
-  const user = {
-    name: "사용자",
-    email: "user@example.com",
-    credits: 8,
+  // 인증 체크: 로그인하지 않은 사용자는 로그인 페이지로 리다이렉트
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login")
+    }
+  }, [user, loading, router])
+
+  // 사용자 크레딧 정보 로드
+  useEffect(() => {
+    const loadUserCredits = async () => {
+      if (!user) return
+      
+      setIsLoadingCredits(true)
+      try {
+        const credits = await getUserCredits()
+        setUserCredits(credits)
+      } catch (error) {
+        console.error("크레딧 정보 로드 오류:", error)
+        toast.error("크레딧 정보를 가져오는데 실패했습니다.")
+      } finally {
+        setIsLoadingCredits(false)
+      }
+    }
+
+    loadUserCredits()
+  }, [user])
+
+  // 로딩 중이거나 인증되지 않은 상태에서는 로딩 화면 표시
+  if (loading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">로딩 중...</h1>
+          <p className="mt-2 text-gray-500">잠시만 기다려 주세요.</p>
+        </div>
+      </div>
+    )
   }
 
-  const plans = [
+  const plans: Plan[] = [
     {
       id: "basic",
       name: "기본 패키지",
@@ -54,9 +105,59 @@ export default function CreditsPage() {
     alert("결제 시스템으로 연결됩니다. (실제 구현 시 토스페이먼츠 연동)")
   }
 
+  // 선택된 플랜 정보
+  const selectedPlanInfo = plans.find((p) => p.id === selectedPlan) || plans[0]
+  
+  // 사용자 이름 계산
+  const userName = user.email?.split('@')[0] || "사용자"
+
   return (
     <div className="flex min-h-screen flex-col">
-      <DashboardHeader user={user} />
+      {/* 직접 구현한 헤더 */}
+      <header className="border-b bg-white">
+        <div className="container flex h-16 items-center justify-between py-4">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-xl font-bold">콘텐츠 마에스트로</span>
+            </Link>
+            <nav className="hidden md:flex items-center gap-6">
+              <Link href="/dashboard" className="text-sm font-medium hover:underline">
+                대시보드
+              </Link>
+              <Link href="/dashboard/history" className="text-sm font-medium hover:underline">
+                결제 내역
+              </Link>
+              <Link href="/dashboard/settings" className="text-sm font-medium hover:underline">
+                설정
+              </Link>
+            </nav>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">크레딧: {userCredits}개</span>
+              <Link href="/dashboard/credits">
+                <Button variant="outline" size="sm">
+                  충전하기
+                </Button>
+              </Link>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="hidden md:inline-block text-sm">{user.email}</span>
+              <Avatar>
+                <AvatarFallback>{userName.charAt(0).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={signOut}
+                className="hidden md:inline-flex"
+              >
+                로그아웃
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
 
       <div className="container py-8">
         <div className="flex flex-col space-y-8">
@@ -92,7 +193,7 @@ export default function CreditsPage() {
                           </div>
                           <div className="text-right">
                             <div className="flex items-center justify-end">
-                              {plan.discount > 0 && (
+                              {plan.discount > 0 && plan.originalPrice && (
                                 <span className="mr-2 text-sm line-through text-gray-500">
                                   {plan.originalPrice.toLocaleString()}원
                                 </span>
@@ -127,24 +228,24 @@ export default function CreditsPage() {
                     <div className="space-y-3">
                       <div className="flex justify-between">
                         <span className="text-gray-500">현재 보유 크레딧</span>
-                        <span>{user.credits}개</span>
+                        <span>{userCredits}개</span>
                       </div>
                       <div className="flex justify-between font-medium">
                         <span>선택한 패키지</span>
-                        <span>{plans.find((p) => p.id === selectedPlan)?.name}</span>
+                        <span>{selectedPlanInfo.name}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">추가될 크레딧</span>
-                        <span>{plans.find((p) => p.id === selectedPlan)?.credits}개</span>
+                        <span>{selectedPlanInfo.credits}개</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">결제 금액</span>
-                        <span>{plans.find((p) => p.id === selectedPlan)?.price.toLocaleString()}원</span>
+                        <span>{selectedPlanInfo.price.toLocaleString()}원</span>
                       </div>
                       <div className="border-t pt-3">
                         <div className="flex justify-between font-medium">
                           <span>충전 후 총 크레딧</span>
-                          <span>{user.credits + (plans.find((p) => p.id === selectedPlan)?.credits || 0)}개</span>
+                          <span>{userCredits + selectedPlanInfo.credits}개</span>
                         </div>
                       </div>
                     </div>
@@ -188,23 +289,27 @@ export default function CreditsPage() {
                     <CardTitle>최근 결제 내역</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">2025-04-01</span>
-                        <span>기본 패키지 (10 크레딧)</span>
-                        <span className="font-medium">5,000원</span>
+                    {isLoadingCredits ? (
+                      <div className="flex items-center justify-center py-4">
+                        <p>결제 내역 로딩 중...</p>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">2025-03-15</span>
-                        <span>스탠다드 패키지 (100 크레딧)</span>
-                        <span className="font-medium">40,000원</span>
-                      </div>
-                    </div>
-                    <div className="mt-4 text-center">
-                      <Link href="/dashboard/history" className="text-sm text-primary hover:underline">
-                        전체 결제 내역 보기
-                      </Link>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          {/* 실제 서비스에서는 API를 통해 결제 내역을 가져옵니다 */}
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">최근 내역 없음</span>
+                            <span>-</span>
+                            <span className="font-medium">-</span>
+                          </div>
+                        </div>
+                        <div className="mt-4 text-center">
+                          <Link href="/dashboard/history" className="text-sm text-primary hover:underline">
+                            전체 결제 내역 보기
+                          </Link>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </div>
