@@ -1,9 +1,6 @@
 {
     "functions": {
-      "api/**/*.js": {
-        "maxDuration": 60
-      },
-      ".next/server/app/api/**/*.js": {
+      "**/*": {
         "maxDuration": 60
       }
     },
